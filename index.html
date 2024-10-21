@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Value Noise Generator</title>
+    <style>
+      body {
+        display: flex;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+      }
+      #sidebar {
+        width: 250px;
+        padding: 20px;
+        background-color: #fff;
+        border-right: 1px solid #000;
+        height: 100vh;
+        box-sizing: border-box;
+        overflow-y: auto;
+      }
+      #main {
+        flex-grow: 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+      canvas {
+        border: 1px solid transparent;
+      }
+      input,
+      button {
+        width: 100%;
+        margin-bottom: 10px;
+        padding: 5px;
+      }
+      label {
+        display: block;
+        margin-top: 10px;
+        font-weight: bold;
+      }
+      #colorInputs {
+        margin-bottom: 10px;
+      }
+      #savePopup {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: white;
+        padding: 20px;
+        border: 1px solid #ccc;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+      #savePopup button {
+        width: auto;
+        margin: 10px;
+        padding: 5px 10px;
+      }
+      #size,
+      #scale,
+      #octaves,
+      #persistence {
+        width: 94%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="sidebar">
+      <h2>Value Noise Generator</h2>
+      <label for="size">Size</label>
+      <input
+        type="number"
+        id="size"
+        placeholder="Size (default: 600)"
+        value="600"
+      />
+      <label for="scale">Scale</label>
+      <input
+        type="number"
+        id="scale"
+        placeholder="Scale (default: 50)"
+        value="50"
+      />
+      <button onclick="randomizeScale()">Scale Randomize</button>
+      <label for="octaves">Octaves</label>
+      <input
+        type="number"
+        id="octaves"
+        placeholder="Octaves (default: 4)"
+        value="4"
+      />
+      <button onclick="randomizeOctaves()">Octaves Randomize</button>
+      <label for="persistence">Persistence</label>
+      <input
+        type="number"
+        id="persistence"
+        placeholder="Persistence (default: 0.5)"
+        value="0.5"
+        step="0.1"
+      />
+      <button onclick="randomizePersistence()">Persistence Randomize</button>
+      <div id="colorInputs">
+        <label>Colors</label>
+        <input type="color" class="colorInput" value="#000000" />
+        <input type="color" class="colorInput" value="#ffffff" />
+      </div>
+      <button onclick="addColorInput()">Add Color</button>
+      <button onclick="deleteColorInput()">Delete Color</button>
+      <button onclick="randomizeColors()">Color Randomize</button>
+      <button onclick="randomizeAll()">Randomize All</button>
+      <button onclick="resetValues()">Reset Values</button>
+      <button onclick="saveImage()">Save Image</button>
+    </div>
+    <div id="main">
+      <canvas id="noiseCanvas"></canvas>
+    </div>
+    <div id="savePopup">
+      <p>Would you like to save the image?</p>
+      <button onclick="cancelSave()">Cancel</button>
+      <button onclick="confirmSave()">Save</button>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("noiseCanvas");
+      const ctx = canvas.getContext("2d");
+
+      function generateNoise() {
+        const size = parseInt(document.getElementById("size").value) || 600;
+        const scale = parseInt(document.getElementById("scale").value) || 50;
+        const octaves = parseInt(document.getElementById("octaves").value) || 4;
+        const persistence =
+          parseFloat(document.getElementById("persistence").value) || 0.5;
+        const colors = Array.from(
+          document.getElementsByClassName("colorInput")
+        ).map((input) => input.value);
+
+        canvas.width = size;
+        canvas.height = size;
+
+        const imageData = ctx.createImageData(size, size);
+
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            let noise = 0;
+            let frequency = 1;
+            let amplitude = 1;
+            let maxValue = 0;
+
+            for (let i = 0; i < octaves; i++) {
+              const sampleX = (x / scale) * frequency;
+              const sampleY = (y / scale) * frequency;
+              const perlinValue = valueNoise(sampleX, sampleY);
+              noise += perlinValue * amplitude;
+
+              maxValue += amplitude;
+              amplitude *= persistence;
+              frequency *= 2;
+            }
+
+            noise = (noise / maxValue + 1) / 2; // Normalize to 0-1 range
+            const colorIndex = Math.min(
+              Math.floor(noise * (colors.length - 1)),
+              colors.length - 2
+            );
+            const t =
+              (noise - colorIndex / (colors.length - 1)) * (colors.length - 1);
+
+            const color1 = hexToRgb(colors[colorIndex]);
+            const color2 = hexToRgb(colors[colorIndex + 1]);
+
+            const r = Math.floor(lerp(t, color1.r, color2.r));
+            const g = Math.floor(lerp(t, color1.g, color2.g));
+            const b = Math.floor(lerp(t, color1.b, color2.b));
+
+            const index = (y * size + x) * 4;
+            imageData.data[index] = r;
+            imageData.data[index + 1] = g;
+            imageData.data[index + 2] = b;
+            imageData.data[index + 3] = 255;
+          }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+      }
+
+      function resetValues() {
+        document.getElementById("size").value = "400";
+        document.getElementById("scale").value = "50";
+        document.getElementById("octaves").value = "4";
+        document.getElementById("persistence").value = "0.5";
+        const colorInputs = document.getElementById("colorInputs");
+        colorInputs.innerHTML = `
+                <label>Colors</label>
+                <input type="color" class="colorInput" value="#000000">
+                <input type="color" class="colorInput" value="#ffffff">
+            `;
+        addColorListeners();
+        generateNoise();
+      }
+
+      function addColorInput() {
+        const colorInputs = document.getElementById("colorInputs");
+        const newInput = document.createElement("input");
+        newInput.type = "color";
+        newInput.className = "colorInput";
+        newInput.value =
+          "#" + Math.floor(Math.random() * 16777215).toString(16);
+        colorInputs.appendChild(newInput);
+        newInput.addEventListener("input", generateNoise);
+        generateNoise();
+      }
+
+      function deleteColorInput() {
+        const colorInputs = document.getElementById("colorInputs");
+        if (colorInputs.children.length > 3) {
+          // Keep at least 2 color inputs
+          colorInputs.removeChild(colorInputs.lastChild);
+          generateNoise();
+        }
+      }
+
+      function saveImage() {
+        const link = document.createElement("a");
+        link.download = "value_noise.jpg";
+        link.href = canvas.toDataURL("image/jpeg");
+        link.click();
+      }
+
+      function valueNoise(x, y) {
+        const x0 = Math.floor(x);
+        const x1 = x0 + 1;
+        const y0 = Math.floor(y);
+        const y1 = y0 + 1;
+
+        const sx = x - x0;
+        const sy = y - y0;
+
+        const n00 = dotGridGradient(x0, y0, x, y);
+        const n10 = dotGridGradient(x1, y0, x, y);
+        const n01 = dotGridGradient(x0, y1, x, y);
+        const n11 = dotGridGradient(x1, y1, x, y);
+
+        const yx = lerp(sy, n00, n01);
+        const y2 = lerp(sy, n10, n11);
+        return lerp(sx, yx, y2);
+      }
+
+      function dotGridGradient(ix, iy, x, y) {
+        const random =
+          2920.0 *
+          Math.sin(ix * 21942.0 + iy * 171324.0 + 8912.0) *
+          Math.cos(ix * 23157.0 * iy * 217832.0 + 9758.0);
+        return random - Math.floor(random);
+      }
+
+      function lerp(t, a, b) {
+        return a + t * (b - a);
+      }
+
+      function hexToRgb(hex) {
+        const r = parseInt(hex.substr(1, 2), 16);
+        const g = parseInt(hex.substr(3, 2), 16);
+        const b = parseInt(hex.substr(5, 2), 16);
+        return { r, g, b };
+      }
+
+      function randomizeAll() {
+        randomizeScale();
+        randomizeOctaves();
+        randomizePersistence();
+        randomizeColors();
+        generateNoise();
+      }
+
+      function randomizeScale() {
+        document.getElementById("scale").value =
+          Math.floor(Math.random() * 91) + 10; // 10-100
+        generateNoise();
+      }
+
+      function randomizeOctaves() {
+        document.getElementById("octaves").value =
+          Math.floor(Math.random() * 7) + 1; // 1-7
+        generateNoise();
+      }
+
+      function randomizePersistence() {
+        document.getElementById("persistence").value = (
+          Math.random() * 0.8 +
+          0.1
+        ).toFixed(2); // 0.1-0.9
+        generateNoise();
+      }
+
+      function randomizeColors() {
+        const colorCount = Math.floor(Math.random() * 4) + 2; // 2-5 colors
+        const colorInputs = document.getElementById("colorInputs");
+        colorInputs.innerHTML = "<label>Colors</label>";
+        for (let i = 0; i < colorCount; i++) {
+          const newInput = document.createElement("input");
+          newInput.type = "color";
+          newInput.className = "colorInput";
+          newInput.value =
+            "#" + Math.floor(Math.random() * 16777215).toString(16);
+          colorInputs.appendChild(newInput);
+        }
+        addColorListeners();
+        generateNoise();
+      }
+
+      function addColorListeners() {
+        document.querySelectorAll(".colorInput").forEach((input) => {
+          input.addEventListener("input", generateNoise);
+        });
+      }
+
+      function saveImage() {
+        document.getElementById("savePopup").style.display = "block";
+      }
+
+      function cancelSave() {
+        document.getElementById("savePopup").style.display = "none";
+      }
+
+      function confirmSave() {
+        const link = document.createElement("a");
+        link.download = "value_noise.jpg";
+        link.href = canvas.toDataURL("image/jpeg");
+        link.click();
+        document.getElementById("savePopup").style.display = "none";
+      }
+
+      // Add event listeners for real-time updates
+      document.getElementById("size").addEventListener("input", generateNoise);
+      document.getElementById("scale").addEventListener("input", generateNoise);
+      document
+        .getElementById("octaves")
+        .addEventListener("input", generateNoise);
+      document
+        .getElementById("persistence")
+        .addEventListener("input", generateNoise);
+      addColorListeners();
+
+      // Initial generation
+      generateNoise();
+    </script>
+  </body>
+</html>

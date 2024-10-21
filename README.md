@@ -1,1 +1,0 @@
-# value_noise_generator_ver1.1
